@@ -55,3 +55,16 @@ Liquidity providers deposit TokenA and TokenB in a fixed ratio and receive LP to
 Swaps are executed with a 0.3% fee, and prices are determined dynamically based on pool reserves.
 
 The arbitrage contract detects price differences between two DEX instances, simulates trades, and executes only when profitable.
+
+## Simulation and Analysis
+
+A simulation was performed with 5 liquidity providers and 8 traders executing random transactions (swaps, deposits, withdrawals).
+A total of 80 transactions were simulated.
+The following metrics were tracked and plotted:
+Spot Price over time
+Total Value Locked (TVL)
+Slippage during swaps
+The results demonstrate:
+Dynamic price discovery based on pool reserves
+Increasing slippage for larger trades
+Stability of the AMM under random trading activity
