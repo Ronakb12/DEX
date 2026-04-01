@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- ethers.js UMD build - loads synchronously before any app code -->
+<script src="https://unpkg.com/ethers@6.7.0/dist/ethers.umd.min.js"></script>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Connector — Sepolia DEX</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<style>
+/* ── RESET ────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+/* ── TOKENS ───────────────────────────────────── */
+:root{
+  --bg:       #060810;
+  --surface:  #0c0f1a;
+  --card:     #10141f;
+  --edge:     #1a2035;
+  --edge2:    #222840;
+  --cyan:     #06d6fc;
+  --cyan-dim: rgba(6,214,252,.12);
+  --green:    #00f5a0;
+  --red:      #ff4060;
+  --amber:    #ffb800;
+  --text:     #dce8f5;
+  --muted:    #4a5878;
+  --mono:     'IBM Plex Mono', monospace;
+  --display:  'Bebas Neue', sans-serif;
+}
+
+/* ── BASE ─────────────────────────────────────── */
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--mono);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── ANIMATED GRID BACKGROUND ─────────────────── */
+body::before{
+  content:'';
+  position:fixed;inset:0;z-index:0;
+  background-image:
+    linear-gradient(rgba(6,214,252,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6,214,252,.04) 1px, transparent 1px);
+  background-size:52px 52px;
+  animation:gridMove 20s linear infinite;
+  pointer-events:none;
+}
+@keyframes gridMove{
+  0%{background-position:0 0}
+  100%{background-position:52px 52px}
+}
+
+/* Radial glow at top */
+body::after{
+  content:'';
+  position:fixed;top:-200px;left:50%;transform:translateX(-50%);
+  width:700px;height:400px;border-radius:50%;
+  background:radial-gradient(ellipse, rgba(6,214,252,.06) 0%, transparent 70%);
+  z-index:0;pointer-events:none;
+}
+
+/* ── LAYOUT ───────────────────────────────────── */
+#app{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:0 20px 80px}
+
+/* ── HEADER ───────────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:28px 0 32px;
+  border-bottom:1px solid var(--edge);
+}
+.logo{
+  font-family:var(--display);
+  font-size:32px;letter-spacing:2px;
+  color:var(--cyan);
+  text-shadow:0 0 30px rgba(6,214,252,.5);
+  display:flex;align-items:center;gap:10px;
+}
+.logo-mark{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--cyan);
+  box-shadow:0 0 12px var(--cyan);
+  animation:blink 2s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.network-badge{
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  padding:5px 12px;border-radius:4px;
+  border:1px solid var(--edge2);
+  color:var(--muted);
+  display:flex;align-items:center;gap:6px;
+}
+.network-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);}
+
+/* ── WALLET BAR ───────────────────────────────── */
+.wallet-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:28px 0 0;
+  padding:16px 20px;
+  background:var(--card);
+  border:1px solid var(--edge);
+  border-radius:10px;
+  gap:16px;
+}
+#account{
+  font-size:12px;color:var(--muted);
+  flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#account.connected{color:var(--green);}
+
+/* ── STATS ROW ────────────────────────────────── */
+.stats-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+  margin:20px 0 0;
+}
+.stat{
+  background:var(--card);border:1px solid var(--edge);border-radius:10px;
+  padding:16px 18px;
+}
+.stat-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.stat-value{font-size:20px;font-family:var(--display);letter-spacing:1px;color:var(--text);}
+.stat-value.cyan{color:var(--cyan);text-shadow:0 0 16px rgba(6,214,252,.3);}
+
+/* ── SECTION ──────────────────────────────────── */
+.section{
+  margin-top:20px;
+  background:var(--card);border:1px solid var(--edge);border-radius:12px;
+  overflow:hidden;
+  animation:fadeUp .4s ease both;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.section:nth-child(2){animation-delay:.05s}
+.section:nth-child(3){animation-delay:.1s}
+.section:nth-child(4){animation-delay:.15s}
+
+.section-header{
+  display:flex;align-items:center;gap:10px;
+  padding:16px 22px;
+  border-bottom:1px solid var(--edge);
+  background:linear-gradient(90deg, rgba(6,214,252,.04) 0%, transparent 60%);
+}
+.section-icon{font-size:15px;}
+.section-title{
+  font-size:10px;letter-spacing:3px;text-transform:uppercase;font-weight:600;
+  color:var(--cyan);
+}
+.section-body{padding:22px;}
+
+/* ── INPUT ROW ────────────────────────────────── */
+.input-group{margin-bottom:14px;}
+.input-label{
+  font-size:9px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;display:block;
+}
+.input-wrap{display:flex;gap:8px;}
+input[type=text],input[type=number]{
+  flex:1;
+  background:var(--surface);
+  border:1px solid var(--edge2);
+  border-radius:8px;
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:14px;
+  padding:11px 14px;
+  outline:none;
+  transition:border-color .2s,box-shadow .2s;
+  width:100%;
+}
+input:focus{
+  border-color:var(--cyan);
+  box-shadow:0 0 0 3px rgba(6,214,252,.08);
+}
+input::placeholder{color:var(--muted);}
+
+.token-tag{
+  display:flex;align-items:center;padding:0 14px;
+  background:var(--surface);border:1px solid var(--edge2);border-radius:8px;
+  font-size:11px;font-weight:600;letter-spacing:1px;color:var(--cyan);
+  white-space:nowrap;
+}
+
+/* ── BUTTONS ──────────────────────────────────── */
+.btn{
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;padding:12px 22px;border-radius:8px;border:none;
+  transition:all .18s;
+}
+.btn-primary{
+  background:var(--cyan);color:#060810;
+}
+.btn-primary:hover{box-shadow:0 0 24px rgba(6,214,252,.45);transform:translateY(-1px);}
+.btn-outline{
+  background:transparent;color:var(--cyan);
+  border:1px solid var(--cyan);
+}
+.btn-outline:hover{background:var(--cyan-dim);}
+.btn-ghost{
+  background:transparent;color:var(--muted);
+  border:1px solid var(--edge2);
+}
+.btn-ghost:hover{color:var(--text);border-color:var(--edge2);}
+.btn-danger{
+  background:transparent;color:var(--red);
+  border:1px solid var(--red);
+}
+.btn-danger:hover{background:rgba(255,64,96,.1);}
+.btn-full{width:100%;}
+.btn-group{display:flex;gap:8px;}
+
+/* ── CONNECT BUTTON ───────────────────────────── */
+#connect-btn{
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;padding:10px 22px;border-radius:8px;
+  border:1px solid var(--cyan);
+  background:var(--cyan-dim);color:var(--cyan);
+  transition:all .18s;white-space:nowrap;
+}
+#connect-btn:hover{background:rgba(6,214,252,.2);box-shadow:0 0 18px rgba(6,214,252,.3);}
+#connect-btn.connected{border-color:var(--green);color:var(--green);background:rgba(0,245,160,.08);}
+
+/* ── SWAP ARROWS ──────────────────────────────── */
+.swap-divider{display:flex;justify-content:center;margin:4px 0;}
+.swap-arrow-btn{
+  background:var(--surface);border:1px solid var(--edge2);border-radius:8px;
+  color:var(--cyan);font-size:18px;width:36px;height:36px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;
+}
+.swap-arrow-btn:hover{border-color:var(--cyan);transform:rotate(180deg);}
+
+/* ── RESULT BOX ───────────────────────────────── */
+.result-box{
+  background:var(--surface);border:1px solid var(--edge2);
+  border-radius:8px;padding:14px 16px;margin-top:14px;
+  font-size:12px;line-height:1.8;
+}
+.result-box .row{display:flex;justify-content:space-between;}
+.result-box .key{color:var(--muted);}
+.result-box .val{font-weight:600;color:var(--text);}
+.result-box .val.cyan{color:var(--cyan);}
+.result-box .val.green{color:var(--green);}
+
+/* ── STATUS MESSAGE ───────────────────────────── */
+#status{
+  position:fixed;bottom:24px;right:24px;z-index:99;
+  max-width:320px;
+  background:var(--card);border:1px solid var(--edge2);
+  border-radius:10px;padding:14px 18px;
+  font-size:12px;line-height:1.6;
+  box-shadow:0 8px 32px rgba(0,0,0,.6);
+  display:none;
+  animation:slideIn .25s ease;
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+#status.show{display:block;}
+#status.ok{border-color:rgba(0,245,160,.3);color:var(--green);}
+#status.err{border-color:rgba(255,64,96,.3);color:var(--red);}
+#status.info{border-color:rgba(6,214,252,.3);color:var(--cyan);}
+
+/* ── LOADING SPINNER ──────────────────────────── */
+.spinner{
+  display:inline-block;width:12px;height:12px;
+  border:2px solid var(--edge2);border-top-color:var(--cyan);
+  border-radius:50%;animation:spin .6s linear infinite;
+  vertical-align:middle;margin-right:6px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── RESPONSIVE ───────────────────────────────── */
+@media(max-width:600px){
+  .stats-row{grid-template-columns:1fr 1fr;}
+  .btn-group{flex-direction:column;}
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark"></div>
+      PulseSwap
+    </div>
+    <div class="network-badge">
+      <div class="network-dot"></div>
+      Sepolia Testnet
+    </div>
+  </header>
+
+  <!-- ── WALLET BAR ── -->
+  <div class="wallet-bar">
+    <p id="account">No wallet connected</p>
+    <button id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+
+  <!-- ── STATS ── -->
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-label">Reserve A</div>
+      <div class="stat-value cyan" id="stat-a">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Reserve B</div>
+      <div class="stat-value cyan" id="stat-b">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Spot Price (B/A)</div>
+      <div class="stat-value" id="stat-price">—</div>
+    </div>
+  </div>
+
+  <!-- ══════════════ FAUCET ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon">🚰</span>
+      <span class="section-title">Token Faucet &nbsp;<span style="font-size:9px;color:var(--muted);letter-spacing:1px;font-weight:400;">10 TKA + 10 TKB per claim &middot; 24h cooldown</span></span>
+    </div>
+    <div class="section-body">
+      <!-- Balances -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:14px 16px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;">Your TokenA</div>
+          <div style="font-size:18px;font-family:var(--display);letter-spacing:1px;color:var(--cyan);" id="faucet-bal-a">—</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:14px 16px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;">Your TokenB</div>
+          <div style="font-size:18px;font-family:var(--display);letter-spacing:1px;color:var(--cyan);" id="faucet-bal-b">—</div>
+        </div>
+      </div>
+      <!-- Cooldown warning -->
+      <div id="faucet-cooldown-msg" style="font-size:11px;color:var(--amber);margin-bottom:12px;display:none;padding:8px 12px;background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.2);border-radius:6px;"></div>
+      <!-- Claim button (both tokens in one tx) -->
+      <button class="btn btn-primary btn-full" id="btn-faucet" onclick="claimFaucet()">
+        🚰 &nbsp;Get 10 TKA + 10 TKB
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════ MY LP POSITION ══════════════ -->
+  <div class="section" id="lp-position-section">
+    <div class="section-header">
+      <span class="section-icon">🪙</span>
+      <span class="section-title">My LP Position</span>
+    </div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:12px 14px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;">LP Tokens</div>
+          <div style="font-size:16px;font-family:var(--display);letter-spacing:1px;color:var(--green);" id="lp-bal">—</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:12px 14px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;">Pool Share</div>
+          <div style="font-size:16px;font-family:var(--display);letter-spacing:1px;color:var(--green);" id="lp-share">—</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:12px 14px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;">Total LPT</div>
+          <div style="font-size:16px;font-family:var(--display);letter-spacing:1px;" id="lp-total">—</div>
+        </div>
+      </div>
+      <!-- Underlying token amounts -->
+      <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:14px 16px;margin-bottom:14px;">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;">Your Underlying Reserves</div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+          <span style="color:var(--muted);">TokenA</span>
+          <span style="font-weight:600;color:var(--cyan);" id="lp-underlying-a">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--muted);">TokenB</span>
+          <span style="font-weight:600;color:var(--cyan);" id="lp-underlying-b">—</span>
+        </div>
+      </div>
+      <!-- Remove liquidity -->
+      <div class="input-group">
+        <span class="input-label">LP Tokens to Remove</span>
+        <div class="input-wrap">
+          <input type="number" id="rm-lp" placeholder="0.00" oninput="previewRemove()" />
+          <div class="token-tag">LPT</div>
+        </div>
+      </div>
+      <!-- quick % buttons -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
+        <button class="btn btn-ghost" style="padding:7px 0;font-size:10px;" onclick="setRemovePct(25)">25%</button>
+        <button class="btn btn-ghost" style="padding:7px 0;font-size:10px;" onclick="setRemovePct(50)">50%</button>
+        <button class="btn btn-ghost" style="padding:7px 0;font-size:10px;" onclick="setRemovePct(75)">75%</button>
+        <button class="btn btn-ghost" style="padding:7px 0;font-size:10px;" onclick="setRemovePct(100)">Max</button>
+      </div>
+      <!-- preview -->
+      <div id="rm-preview" style="display:none;background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="color:var(--muted);">You receive TKA</span>
+          <span style="color:var(--green);font-weight:600;" id="rm-out-a">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:var(--muted);">You receive TKB</span>
+          <span style="color:var(--green);font-weight:600;" id="rm-out-b">—</span>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-full" id="btn-remove" onclick="removeLiquidity()">Remove Liquidity</button>
+      <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="refreshLPPosition()">↻ Refresh Position</button>
+    </div>
+  </div>
+
+  <!-- ══════════════ ADD LIQUIDITY ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon">💧</span>
+      <span class="section-title">Add Liquidity</span>
+    </div>
+    <div class="section-body">
+      <div id="liq-ratio-hint" style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:14px;padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--edge2);display:none;">
+        CURRENT RATIO &mdash; 1 TKA = <span id="liq-ratio-val">&#8212;</span> TKB
+      </div>
+      <div class="input-group">
+        <span class="input-label">Token A Amount</span>
+        <div class="input-wrap">
+          <input type="number" id="a" placeholder="0.00" oninput="autoFillB()" />
+          <div class="token-tag">TKA</div>
+        </div>
+      </div>
+      <div class="input-group">
+        <span class="input-label">Token B Amount &nbsp;<span style="color:var(--cyan);font-size:9px;letter-spacing:1px;" id="liq-b-auto"></span></span>
+        <div class="input-wrap">
+          <input type="number" id="b" placeholder="0.00" oninput="autoFillA()" />
+          <div class="token-tag">TKB</div>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="addLiquidity()">
+        Add Liquidity
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════ SWAP ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon">🔁</span>
+      <span class="section-title">Swap Tokens</span>
+    </div>
+    <div class="section-body">
+      <div class="input-group">
+        <span class="input-label">Amount to Swap</span>
+        <div class="input-wrap">
+          <input type="number" id="swapAmount" placeholder="0.00" oninput="previewSwap()"/>
+          <div class="token-tag" id="swap-in-tag">TKA</div>
+        </div>
+      </div>
+
+      <div class="swap-divider">
+        <button class="swap-arrow-btn" onclick="flipSwapDir()" title="Flip direction">⇅</button>
+      </div>
+
+      <div class="result-box" style="margin-top:0;margin-bottom:14px;">
+        <div class="row">
+          <span class="key">Direction</span>
+          <span class="val cyan" id="swap-dir-label">A → B</span>
+        </div>
+        <div class="row">
+          <span class="key">Estimated Out</span>
+          <span class="val green" id="swap-preview">—</span>
+        </div>
+        <div class="row">
+          <span class="key">Fee (0.3%)</span>
+          <span class="val" id="swap-fee">—</span>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" style="flex:1" onclick="swapAtoB()">A → B</button>
+        <button class="btn btn-outline" style="flex:1" onclick="swapBtoA()">B → A</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ POOL INFO ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon">📊</span>
+      <span class="section-title">Pool Info</span>
+    </div>
+    <div class="section-body">
+      <div class="result-box" style="margin-top:0">
+        <div class="row">
+          <span class="key">Reserve A</span>
+          <span class="val cyan" id="res-a">—</span>
+        </div>
+        <div class="row">
+          <span class="key">Reserve B</span>
+          <span class="val cyan" id="res-b">—</span>
+        </div>
+        <div class="row">
+          <span class="key">Spot Price (B per A)</span>
+          <span class="val" id="res-price">—</span>
+        </div>
+        <div class="row">
+          <span class="key">Constant Product k</span>
+          <span class="val" id="res-k">—</span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-full" style="margin-top:12px" onclick="getReserves()">
+        ↻ Refresh Pool Data
+      </button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ── STATUS TOAST ── -->
+<div id="status"></div>
+
+<!-- ── APP LOGIC ── -->
+<script>
+// Wait for ethers to be available before running app
+function initApp() {
+  if (typeof ethers === 'undefined') {
+    document.getElementById('connect-btn').textContent = 'Loading…';
+    setTimeout(initApp, 100);
+    return;
+  }
+  document.getElementById('connect-btn').textContent = 'Connect Wallet';
+  // App is ready
+}
+window.addEventListener('load', initApp);
+
+/* ════════════════════════════════════════════════
+   ORIGINAL CONTRACT CONFIG (unchanged)
+   ════════════════════════════════════════════════ */
+let provider, signer;
+let dex, tokenA, tokenB, faucetContract, lpToken;
+
+const DEX      = "0xBe58Fc9A9CD5282E7A0Db046112BbAb208E0B852";
+const TOKEN_A  = "0x075F4bA80abc9FE84E875887e2b85aCD187E2943";
+const TOKEN_B  = "0xA9aa571EE8d0F6FCD6f9a96C7E598F90c99D63E1";
+const FAUCET   = "0xYOUR_FAUCET_CONTRACT_ADDRESS";   // ← paste after deploying Faucet.sol
+const LP_TOKEN = "0xYOUR_LP_TOKEN_ADDRESS";          // ← your LPToken contract address
+
+// Secret code hardcoded in Faucet.sol — keep this in sync
+const FAUCET_CODE = "qwertyuiop";
+
+const dexAbi = [
+  "function addLiquidity(uint,uint)",
+  "function removeLiquidity(uint)",
+  "function swapAforB(uint) returns(uint)",
+  "function swapBforA(uint) returns(uint)",
+  "function getReserves() view returns(uint,uint)"
+];
+const erc20Abi = [
+  "function approve(address,uint)",
+  "function balanceOf(address) view returns(uint)"
+];
+const faucetAbi = [
+  "function claim(string code)",
+  "function getLastClaim(address) view returns(uint)",
+  "function lastClaim(address) view returns(uint)"
+];
+const lpTokenAbi = [
+  "function balanceOf(address) view returns(uint)",
+  "function totalSupply() view returns(uint)"
+];
+
+/* ════════════════════════════════════════════════
+   UI HELPERS
+   ════════════════════════════════════════════════ */
+let _statusTimer;
+function showStatus(msg, type='info') {
+  const el = document.getElementById('status');
+  el.innerHTML = msg;
+  el.className = `show ${type}`;
+  clearTimeout(_statusTimer);
+  if (type !== 'info' || msg.includes('spinner')) {
+    _statusTimer = setTimeout(() => el.className = '', 4500);
+  }
+}
+function loading(msg) {
+  showStatus(`<span class="spinner"></span>${msg}`, 'info');
+}
+function success(msg) { showStatus('✓ ' + msg, 'ok'); }
+function error(msg)   { showStatus('✗ ' + msg, 'err'); }
+
+function fmt(wei) {
+  const n = parseFloat(ethers.formatUnits(wei, 18));
+  return n >= 1000 ? n.toLocaleString('en', {maximumFractionDigits:2}) : n.toFixed(4);
+}
+
+/* ════════════════════════════════════════════════
+   CONNECT WALLET
+   ════════════════════════════════════════════════ */
+async function connectWallet() {
+  // 1. Check MetaMask is installed
+  if (typeof window.ethereum === 'undefined') {
+    error('MetaMask not found — please install it first');
+    window.open('https://metamask.io/download/', '_blank');
+    return;
+  }
+
+  try {
+    loading('Requesting wallet access…');
+
+    // 2. Request accounts directly via window.ethereum (most reliable)
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || accounts.length === 0) {
+      error('No accounts returned — unlock MetaMask and try again');
+      return;
+    }
+
+    // 3. Check network — Sepolia = chainId 11155111 (0xaa36a7)
+    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+    if (chainId !== '0xaa36a7') {
+      loading('Switching to Sepolia…');
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xaa36a7' }]
+        });
+      } catch (switchErr) {
+        // Chain not added to MetaMask yet — add it
+        if (switchErr.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0xaa36a7',
+              chainName: 'Sepolia Testnet',
+              nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://rpc.sepolia.org'],
+              blockExplorerUrls: ['https://sepolia.etherscan.io']
+            }]
+          });
+        } else {
+          error('Please switch to Sepolia in MetaMask manually');
+          return;
+        }
+      }
+    }
+
+    // 4. Build ethers provider + signer
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer   = await provider.getSigner();
+
+    // 5. Wire up contracts
+    dex             = new ethers.Contract(DEX,      dexAbi,     signer);
+    tokenA          = new ethers.Contract(TOKEN_A,  erc20Abi,   signer);
+    tokenB          = new ethers.Contract(TOKEN_B,  erc20Abi,   signer);
+    faucetContract  = new ethers.Contract(FAUCET,   faucetAbi,  signer);
+    lpToken         = new ethers.Contract(LP_TOKEN, lpTokenAbi, signer);
+
+    // 6. Update UI
+    const addr  = await signer.getAddress();
+    const short = addr.slice(0,6) + '…' + addr.slice(-4);
+    document.getElementById('account').textContent = '⬤  ' + short;
+    document.getElementById('account').className   = 'connected';
+    document.getElementById('connect-btn').textContent = short;
+    document.getElementById('connect-btn').classList.add('connected');
+    success('Connected: ' + short);
+    await getReserves();
+    await refreshBalances();
+    await refreshLPPosition();
+
+    // 7. Auto-reconnect if user switches account
+    window.ethereum.on('accountsChanged', (accs) => {
+      if (accs.length === 0) {
+        document.getElementById('account').textContent = 'No wallet connected';
+        document.getElementById('account').className   = '';
+        document.getElementById('connect-btn').textContent = 'Connect Wallet';
+        document.getElementById('connect-btn').classList.remove('connected');
+      } else {
+        connectWallet();
+      }
+    });
+    window.ethereum.on('chainChanged', () => location.reload());
+
+  } catch(e) {
+    if (e.code === 4001) {
+      error('Connection rejected — please approve in MetaMask');
+    } else {
+      error(e.message?.slice(0, 90) || 'Connection failed');
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════
+   ADD LIQUIDITY  (original logic)
+   ════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   GLOBAL RESERVE CACHE (updated on every getReserves call)
+   ════════════════════════════════════════════════ */
+let _resA = 0, _resB = 0;       // floats for display
+let _resA_raw = 0n, _resB_raw = 0n; // BigInt raw wei — used for exact ratio math
+let _filling = false;               // prevents infinite oninput loop
+
+function autoFillB() {
+  if (_filling) return;
+  const aVal = document.getElementById('a').value;
+  if (!aVal || parseFloat(aVal) <= 0) { document.getElementById('b').value = ''; return; }
+  if (_resA_raw > 0n && _resB_raw > 0n) {
+    _filling = true;
+    // Use BigInt arithmetic to match Solidity's integer division exactly
+    const aWei = ethers.parseUnits(aVal, 18);
+    const bWei = aWei * _resB_raw / _resA_raw;
+    document.getElementById('b').value = ethers.formatUnits(bWei, 18);
+    document.getElementById('liq-b-auto').textContent = '(auto)';
+    _filling = false;
+  }
+}
+
+function autoFillA() {
+  if (_filling) return;
+  const bVal = document.getElementById('b').value;
+  if (!bVal || parseFloat(bVal) <= 0) { document.getElementById('a').value = ''; return; }
+  if (_resA_raw > 0n && _resB_raw > 0n) {
+    _filling = true;
+    const bWei = ethers.parseUnits(bVal, 18);
+    const aWei = bWei * _resA_raw / _resB_raw;
+    document.getElementById('a').value = ethers.formatUnits(aWei, 18);
+    document.getElementById('liq-b-auto').textContent = '(auto)';
+    _filling = false;
+  }
+}
+
+/* ════════════════════════════════════════════════
+   FAUCET  (uses Faucet.sol — claim(string code))
+   ════════════════════════════════════════════════ */
+async function claimFaucet() {
+  if (!signer) { error('Connect wallet first'); return; }
+  const btn = document.getElementById('btn-faucet');
+  try {
+    // Check 24h cooldown via lastClaim mapping
+    const addr = await signer.getAddress();
+    const lastClaimTime = await faucetContract.lastClaim(addr);
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const cooldown = BigInt(86400); // 1 day in seconds
+    const nextClaim = lastClaimTime + cooldown;
+    if (now < nextClaim) {
+      const remaining = Number(nextClaim - now);
+      const hrs  = Math.floor(remaining / 3600);
+      const mins = Math.floor((remaining % 3600) / 60);
+      const cdMsg = document.getElementById('faucet-cooldown-msg');
+      cdMsg.style.display = 'block';
+      cdMsg.textContent = `⏱ Cooldown active — next claim in ${hrs}h ${mins}m`;
+      error(`Wait ${hrs}h ${mins}m before claiming again`);
+      return;
+    }
+    loading('Claiming tokens from faucet…');
+    btn.disabled = true;
+    // Pass the secret code to Faucet.sol claim()
+    await (await faucetContract.claim(FAUCET_CODE)).wait();
+    success('10 TKA + 10 TKB claimed successfully!');
+    document.getElementById('faucet-cooldown-msg').style.display = 'none';
+    await refreshBalances();
+    await refreshLPPosition();
+  } catch(e) {
+    const msg = e.reason || e.message || '';
+    if (msg.includes('Wait 24')) error('Faucet: wait 24 hours between claims');
+    else if (msg.includes('Invalid code')) error('Faucet: invalid secret code');
+    else if (msg.includes('transfer failed')) error('Faucet is empty — contact owner to refill');
+    else error(msg.slice(0, 90) || 'Claim failed');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function refreshBalances() {
+  if (!signer) return;
+  try {
+    const addr = await signer.getAddress();
+    const [bA, bB] = await Promise.all([
+      tokenA.balanceOf(addr),
+      tokenB.balanceOf(addr)
+    ]);
+    document.getElementById('faucet-bal-a').textContent = parseFloat(ethers.formatUnits(bA, 18)).toFixed(4) + ' TKA';
+    document.getElementById('faucet-bal-b').textContent = parseFloat(ethers.formatUnits(bB, 18)).toFixed(4) + ' TKB';
+
+    // Update cooldown message
+    const lastClaimTime = await faucetContract.lastClaim(addr);
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const nextClaim = lastClaimTime + BigInt(86400);
+    const btn = document.getElementById('btn-faucet');
+    const cdMsg = document.getElementById('faucet-cooldown-msg');
+    if (lastClaimTime > 0n && now < nextClaim) {
+      const remaining = Number(nextClaim - now);
+      const hrs  = Math.floor(remaining / 3600);
+      const mins = Math.floor((remaining % 3600) / 60);
+      btn.disabled = true;
+      btn.textContent = `⏱ Next claim in ${hrs}h ${mins}m`;
+      cdMsg.style.display = 'block';
+      cdMsg.textContent = `⏱ Cooldown active — next claim in ${hrs}h ${mins}m`;
+    } else {
+      btn.disabled = false;
+      btn.textContent = '🚰  Get 10 TKA + 10 TKB';
+      cdMsg.style.display = 'none';
+    }
+  } catch(e) { /* silent if not connected */ }
+}
+
+/* ════════════════════════════════════════════════
+   LP POSITION
+   ════════════════════════════════════════════════ */
+async function refreshLPPosition() {
+  if (!signer) return;
+  try {
+    const addr = await signer.getAddress();
+    const [lpBal, lpTotal, rA, rB] = await Promise.all([
+      lpToken.balanceOf(addr),
+      lpToken.totalSupply(),
+      ...( async () => { const [a,b] = await dex.getReserves(); return [a,b]; })()
+    ]);
+
+    const lpBalF   = parseFloat(ethers.formatUnits(lpBal,   18));
+    const lpTotalF = parseFloat(ethers.formatUnits(lpTotal, 18));
+    const rAf      = parseFloat(ethers.formatUnits(rA, 18));
+    const rBf      = parseFloat(ethers.formatUnits(rB, 18));
+
+    const sharePct = lpTotalF > 0 ? (lpBalF / lpTotalF * 100) : 0;
+    const myA      = lpTotalF > 0 ? (lpBalF / lpTotalF * rAf) : 0;
+    const myB      = lpTotalF > 0 ? (lpBalF / lpTotalF * rBf) : 0;
+
+    document.getElementById('lp-bal').textContent          = lpBalF.toFixed(4);
+    document.getElementById('lp-share').textContent        = sharePct.toFixed(2) + '%';
+    document.getElementById('lp-total').textContent        = lpTotalF.toFixed(4);
+    document.getElementById('lp-underlying-a').textContent = myA.toFixed(4) + ' TKA';
+    document.getElementById('lp-underlying-b').textContent = myB.toFixed(4) + ' TKB';
+  } catch(e) { /* silent */ }
+}
+
+function setRemovePct(pct) {
+  // Read current lp-bal display to set input
+  const balText = document.getElementById('lp-bal').textContent;
+  const bal = parseFloat(balText) || 0;
+  if (bal <= 0) { error('No LP tokens to remove'); return; }
+  const amt = (bal * pct / 100).toFixed(6);
+  document.getElementById('rm-lp').value = amt;
+  previewRemove();
+}
+
+async function previewRemove() {
+  const lpAmt = parseFloat(document.getElementById('rm-lp').value) || 0;
+  const preview = document.getElementById('rm-preview');
+  if (lpAmt <= 0) { preview.style.display = 'none'; return; }
+  try {
+    const [lpTotal, rA, rB] = await Promise.all([
+      lpToken.totalSupply(),
+      ...( async () => { const [a,b] = await dex.getReserves(); return [a,b]; })()
+    ]);
+    const lpTotalF = parseFloat(ethers.formatUnits(lpTotal, 18));
+    const rAf = parseFloat(ethers.formatUnits(rA, 18));
+    const rBf = parseFloat(ethers.formatUnits(rB, 18));
+    const outA = lpTotalF > 0 ? (lpAmt / lpTotalF * rAf).toFixed(4) : '0';
+    const outB = lpTotalF > 0 ? (lpAmt / lpTotalF * rBf).toFixed(4) : '0';
+    document.getElementById('rm-out-a').textContent = outA + ' TKA';
+    document.getElementById('rm-out-b').textContent = outB + ' TKB';
+    preview.style.display = 'block';
+  } catch(e) { preview.style.display = 'none'; }
+}
+
+async function removeLiquidity() {
+  if (!signer) { error('Connect wallet first'); return; }
+  const lpAmtStr = document.getElementById('rm-lp').value;
+  if (!lpAmtStr || parseFloat(lpAmtStr) <= 0) { error('Enter LP amount to remove'); return; }
+  try {
+    const lpAmt = ethers.parseUnits(lpAmtStr, 18);
+    loading('Removing liquidity…');
+    document.getElementById('btn-remove').disabled = true;
+    await (await dex.removeLiquidity(lpAmt)).wait();
+    success('Liquidity removed!');
+    document.getElementById('rm-lp').value = '';
+    document.getElementById('rm-preview').style.display = 'none';
+    await Promise.all([getReserves(), refreshBalances(), refreshLPPosition()]);
+  } catch(e) {
+    error(e.reason || e.message?.slice(0, 90) || 'Remove failed');
+  } finally {
+    document.getElementById('btn-remove').disabled = false;
+  }
+}
+
+async function addLiquidity() {
+  try {
+    const aVal = document.getElementById("a").value;
+    const bVal = document.getElementById("b").value;
+    if (!aVal || !bVal) { error('Enter both amounts'); return; }
+
+    const a = ethers.parseUnits(aVal, 18);
+    // Recompute b from raw reserves to guarantee exact on-chain ratio match
+    let b;
+    if (_resA_raw > 0n && _resB_raw > 0n) {
+      b = a * _resB_raw / _resA_raw;
+    } else {
+      b = ethers.parseUnits(bVal, 18); // first deposit — use user's value
+    }
+
+    loading('Approving TokenA…');
+    await (await tokenA.approve(DEX, a)).wait();
+    loading('Approving TokenB…');
+    await (await tokenB.approve(DEX, b)).wait();
+    loading('Adding liquidity…');
+    await (await dex.addLiquidity(a, b)).wait();
+
+    document.getElementById("a").value = '';
+    document.getElementById("b").value = '';
+    success('Liquidity added successfully!');
+    await getReserves();
+    await refreshBalances();
+    await refreshLPPosition();
+  } catch(e) {
+    error(e.reason || e.message?.slice(0,80) || 'Transaction failed');
+  }
+}
+
+/* ════════════════════════════════════════════════
+   SWAP  (original logic + direction toggle)
+   ════════════════════════════════════════════════ */
+let swapDir = 'AB';
+
+function flipSwapDir() {
+  swapDir = swapDir === 'AB' ? 'BA' : 'AB';
+  document.getElementById('swap-in-tag').textContent  = swapDir === 'AB' ? 'TKA' : 'TKB';
+  document.getElementById('swap-dir-label').textContent = swapDir === 'AB' ? 'A → B' : 'B → A';
+  previewSwap();
+}
+
+async function previewSwap() {
+  const amt = parseFloat(document.getElementById('swapAmount').value) || 0;
+  if (amt <= 0) { document.getElementById('swap-preview').textContent = '—'; return; }
+  try {
+    const [rA, rB] = await dex.getReserves();
+    const rIn  = swapDir === 'AB' ? rA : rB;
+    const rOut = swapDir === 'AB' ? rB : rA;
+    const amtIn = ethers.parseUnits(String(amt), 18);
+    const amtFee = amtIn * 997n / 1000n;
+    const out = (rOut * amtFee) / (rIn + amtFee);
+    const fee = ethers.parseUnits(String(amt * 0.003), 18);
+    document.getElementById('swap-preview').textContent = fmt(out) + (swapDir==='AB'?' TKB':' TKA');
+    document.getElementById('swap-fee').textContent     = fmt(fee) + (swapDir==='AB'?' TKA':' TKB');
+  } catch { /* not connected yet */ }
+}
+
+async function swapAtoB() {
+  try {
+    const amt = document.getElementById("swapAmount").value;
+    if (!amt) { error('Enter swap amount'); return; }
+    const a = ethers.parseUnits(amt, 18);
+    loading('Approving TokenA…');
+    await (await tokenA.approve(DEX, a)).wait();
+    loading('Swapping A → B…');
+    await (await dex.swapAforB(a)).wait();
+    success('Swapped A → B!');
+    document.getElementById('swapAmount').value = '';
+    document.getElementById('swap-preview').textContent = '—';
+    await getReserves();
+  } catch(e) {
+    error(e.reason || e.message?.slice(0,80) || 'Swap failed');
+  }
+}
+
+async function swapBtoA() {
+  try {
+    const amt = document.getElementById("swapAmount").value;
+    if (!amt) { error('Enter swap amount'); return; }
+    const b = ethers.parseUnits(amt, 18);
+    loading('Approving TokenB…');
+    await (await tokenB.approve(DEX, b)).wait();
+    loading('Swapping B → A…');
+    await (await dex.swapBforA(b)).wait();
+    success('Swapped B → A!');
+    document.getElementById('swapAmount').value = '';
+    document.getElementById('swap-preview').textContent = '—';
+    await getReserves();
+  } catch(e) {
+    error(e.reason || e.message?.slice(0,80) || 'Swap failed');
+  }
+}
+
+/* ════════════════════════════════════════════════
+   GET RESERVES  (original logic + stat updates)
+   ════════════════════════════════════════════════ */
+async function getReserves() {
+  try {
+    const [rA, rB] = await dex.getReserves();
+    const rAf = parseFloat(ethers.formatUnits(rA, 18));
+    const rBf = parseFloat(ethers.formatUnits(rB, 18));
+    // Cache reserves globally for ratio auto-fill
+    _resA = rAf; _resB = rBf;
+    _resA_raw = rA; _resB_raw = rB; // keep raw BigInt for exact math
+    // Show ratio hint in liquidity panel
+    if (rAf > 0 && rBf > 0) {
+      document.getElementById('liq-ratio-hint').style.display = 'block';
+      document.getElementById('liq-ratio-val').textContent = (rBf/rAf).toFixed(6);
+    }
+    const price = rAf > 0 ? (rBf / rAf).toFixed(6) : '—';
+    const k     = rAf > 0 ? (rAf * rBf).toExponential(3) : '—';
+
+    // Panel
+    document.getElementById('res-a').textContent     = fmt(rA) + ' TKA';
+    document.getElementById('res-b').textContent     = fmt(rB) + ' TKB';
+    document.getElementById('res-price').textContent = price;
+    document.getElementById('res-k').textContent     = k;
+    // Stats bar
+    document.getElementById('stat-a').textContent    = fmt(rA);
+    document.getElementById('stat-b').textContent    = fmt(rB);
+    document.getElementById('stat-price').textContent= price;
+    // Old div kept for compatibility
+    document.getElementById("reserves").innerText =
+      "ReserveA: " + ethers.formatUnits(rA, 18) +
+      " | ReserveB: " + ethers.formatUnits(rB, 18);
+  } catch(e) { /* not connected */ }
+}
+</script>
+
+<!-- hidden legacy element kept for original script compatibility -->
+<p id="reserves" style="display:none"></p>
+
+</body>
+</html>
