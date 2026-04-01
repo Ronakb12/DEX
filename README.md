@@ -44,6 +44,22 @@ https://youtu.be/L7kk-_dK9hI
 4. Perform swaps using swapAforB() and swapBforA()
 5. Run arbitrage using executeArbitrage()
 
+## How to UI
+
+Step 1: Open terminal in UI folder
+Run:
+python3 -m http.server 8000
+
+Step 2: Open in browser
+http://localhost:8000
+
+Step 3: Connect MetaMask
+Make sure:
+Network = Sepolia
+You have tokens
+Click:
+Connect Wallet
+
 ---
 
 ## Overview
