@@ -5,7 +5,7 @@
 <script src="https://unpkg.com/ethers@6.7.0/dist/ethers.umd.min.js"></script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Connector — Sepolia DEX</title>
+<title>TokenDexDemo — Sepolia DEX</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
@@ -291,7 +291,7 @@ input::placeholder{color:var(--muted);}
   <header>
     <div class="logo">
       <div class="logo-mark"></div>
-      PulseSwap
+      TokenDexDemo
     </div>
     <div class="network-badge">
       <div class="network-dot"></div>
@@ -339,12 +339,50 @@ input::placeholder{color:var(--muted);}
           <div style="font-size:18px;font-family:var(--display);letter-spacing:1px;color:var(--cyan);" id="faucet-bal-b">—</div>
         </div>
       </div>
+      <!-- Faucet reserve balances -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:10px 14px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;">Faucet TKA Reserve</div>
+          <div style="font-size:13px;font-weight:600;color:var(--muted);" id="faucet-res-a">—</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--edge2);border-radius:8px;padding:10px 14px;">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;">Faucet TKB Reserve</div>
+          <div style="font-size:13px;font-weight:600;color:var(--muted);" id="faucet-res-b">—</div>
+        </div>
+      </div>
       <!-- Cooldown warning -->
       <div id="faucet-cooldown-msg" style="font-size:11px;color:var(--amber);margin-bottom:12px;display:none;padding:8px 12px;background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.2);border-radius:6px;"></div>
-      <!-- Claim button (both tokens in one tx) -->
+      <!-- Claim button -->
       <button class="btn btn-primary btn-full" id="btn-faucet" onclick="claimFaucet()">
         🚰 &nbsp;Get 10 TKA + 10 TKB
       </button>
+
+      <!-- ── OWNER REFILL PANEL (hidden for non-owners) ── -->
+      <div id="owner-refill-panel" style="display:none;margin-top:20px;padding-top:18px;border-top:1px solid var(--edge2);">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--amber);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);display:inline-block;"></span>
+          Owner — Refill Faucet
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div class="input-group" style="margin-bottom:0;">
+            <span class="input-label">TKA Amount</span>
+            <div class="input-wrap">
+              <input type="number" id="deposit-a" placeholder="1000" />
+              <div class="token-tag">TKA</div>
+            </div>
+          </div>
+          <div class="input-group" style="margin-bottom:0;">
+            <span class="input-label">TKB Amount</span>
+            <div class="input-wrap">
+              <input type="number" id="deposit-b" placeholder="1000" />
+              <div class="token-tag">TKB</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-full" style="background:rgba(255,184,0,.12);color:var(--amber);border:1px solid rgba(255,184,0,.3);font-size:11px;letter-spacing:1.5px;" onclick="refillFaucet()">
+          ↑ &nbsp;Transfer Tokens to Faucet
+        </button>
+      </div>
     </div>
   </div>
 
@@ -542,7 +580,7 @@ let dex, tokenA, tokenB, faucetContract, lpToken;
 const DEX      = "0xBe58Fc9A9CD5282E7A0Db046112BbAb208E0B852";
 const TOKEN_A  = "0x075F4bA80abc9FE84E875887e2b85aCD187E2943";
 const TOKEN_B  = "0xA9aa571EE8d0F6FCD6f9a96C7E598F90c99D63E1";
-const FAUCET   = "0xYOUR_FAUCET_CONTRACT_ADDRESS";   // ← paste after deploying Faucet.sol
+const FAUCET   = "0x37616CF2fB8032cDAB7730f956aE4B7a30567b71";
 const LP_TOKEN = "0xYOUR_LP_TOKEN_ADDRESS";          // ← your LPToken contract address
 
 // Secret code hardcoded in Faucet.sol — keep this in sync
@@ -562,7 +600,9 @@ const erc20Abi = [
 const faucetAbi = [
   "function claim(string code)",
   "function getLastClaim(address) view returns(uint)",
-  "function lastClaim(address) view returns(uint)"
+  "function lastClaim(address) view returns(uint)",
+  "function deposit(uint amountA, uint amountB)",
+  "function owner() view returns(address)"
 ];
 const lpTokenAbi = [
   "function balanceOf(address) view returns(uint)",
@@ -769,6 +809,31 @@ async function claimFaucet() {
   }
 }
 
+async function refillFaucet() {
+  if (!signer) { error('Connect wallet first'); return; }
+  const aVal = document.getElementById('deposit-a').value;
+  const bVal = document.getElementById('deposit-b').value;
+  if (!aVal || !bVal || parseFloat(aVal) <= 0 || parseFloat(bVal) <= 0) {
+    error('Enter amounts for both tokens'); return;
+  }
+  try {
+    const amtA = ethers.parseUnits(aVal, 18);
+    const amtB = ethers.parseUnits(bVal, 18);
+    loading('Approving TKA…');
+    await (await tokenA.approve(FAUCET, amtA)).wait();
+    loading('Approving TKB…');
+    await (await tokenB.approve(FAUCET, amtB)).wait();
+    loading('Transferring tokens to faucet…');
+    await (await faucetContract.deposit(amtA, amtB)).wait();
+    success(`Faucet refilled: ${aVal} TKA + ${bVal} TKB`);
+    document.getElementById('deposit-a').value = '';
+    document.getElementById('deposit-b').value = '';
+    await refreshBalances();
+  } catch(e) {
+    error(e.reason || e.message?.slice(0, 90) || 'Refill failed');
+  }
+}
+
 async function refreshBalances() {
   if (!signer) return;
   try {
@@ -799,6 +864,24 @@ async function refreshBalances() {
       btn.textContent = '🚰  Get 10 TKA + 10 TKB';
       cdMsg.style.display = 'none';
     }
+    // Show faucet reserves
+    const [fResA, fResB] = await Promise.all([
+      tokenA.balanceOf(FAUCET),
+      tokenB.balanceOf(FAUCET)
+    ]);
+    document.getElementById('faucet-res-a').textContent = parseFloat(ethers.formatUnits(fResA, 18)).toFixed(2) + ' TKA';
+    document.getElementById('faucet-res-b').textContent = parseFloat(ethers.formatUnits(fResB, 18)).toFixed(2) + ' TKB';
+
+    // Show owner refill panel only if connected wallet is faucet owner
+    try {
+      const faucetOwner = await faucetContract.owner();
+      const panel = document.getElementById('owner-refill-panel');
+      if (faucetOwner.toLowerCase() === addr.toLowerCase()) {
+        panel.style.display = 'block';
+      } else {
+        panel.style.display = 'none';
+      }
+    } catch(e) { /* silent */ }
   } catch(e) { /* silent if not connected */ }
 }
 
